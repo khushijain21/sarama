@@ -1,12 +1,22 @@
 package sarama
 
 import (
+	"errors"
 	"sort"
 	"time"
+
+	"github.com/rcrowley/go-metrics"
+)
+
+const (
+	invalidLeaderEpoch        = -1
+	invalidPreferredReplicaID = -1
 )
 
 type AbortedTransaction struct {
-	ProducerID  int64
+	// ProducerID contains the producer id associated with the aborted transaction.
+	ProducerID int64
+	// FirstOffset contains the first offset in the aborted transaction.
 	FirstOffset int64
 }
 
@@ -30,18 +40,37 @@ func (t *AbortedTransaction) encode(pe packetEncoder) (err error) {
 }
 
 type FetchResponseBlock struct {
-	Err                  KError
-	HighWaterMarkOffset  int64
-	LastStableOffset     int64
-	LogStartOffset       int64
-	AbortedTransactions  []*AbortedTransaction
+	// Err contains the error code, or 0 if there was no fetch error.
+	Err KError
+	// HighWatermarkOffset contains the current high water mark.
+	HighWaterMarkOffset int64
+	// LastStableOffset contains the last stable offset (or LSO) of the
+	// partition. This is the last offset such that the state of all
+	// transactional records prior to this offset have been decided (ABORTED or
+	// COMMITTED)
+	LastStableOffset       int64
+	LastRecordsBatchOffset *int64
+	// LogStartOffset contains the current log start offset.
+	LogStartOffset int64
+	// AbortedTransactions contains the aborted transactions.
+	AbortedTransactions []*AbortedTransaction
+	// PreferredReadReplica contains the preferred read replica for the
+	// consumer to use on its next fetch request
 	PreferredReadReplica int32
-	Records              *Records // deprecated: use FetchResponseBlock.RecordsSet
-	RecordsSet           []*Records
-	Partial              bool
+	// RecordsSet contains the record data.
+	RecordsSet []*Records
+
+	Partial bool
+	Records *Records // deprecated: use FetchResponseBlock.RecordsSet
 }
 
 func (b *FetchResponseBlock) decode(pd packetDecoder, version int16) (err error) {
+	metricRegistry := pd.metricRegistry()
+	var sizeMetric metrics.Histogram
+	if metricRegistry != nil {
+		sizeMetric = getOrRegisterHistogram("consumer-fetch-response-size", metricRegistry)
+	}
+
 	tmp, err := pd.getInt16()
 	if err != nil {
 		return err
@@ -97,6 +126,9 @@ func (b *FetchResponseBlock) decode(pd packetDecoder, version int16) (err error)
 	if err != nil {
 		return err
 	}
+	if sizeMetric != nil {
+		sizeMetric.Update(int64(recordsSize))
+	}
 
 	recordsDecoder, err := pd.getSubset(int(recordsSize))
 	if err != nil {
@@ -109,12 +141,17 @@ func (b *FetchResponseBlock) decode(pd packetDecoder, version int16) (err error)
 		records := &Records{}
 		if err := records.decode(recordsDecoder); err != nil {
 			// If we have at least one decoded records, this is not an error
-			if err == ErrInsufficientData {
+			if errors.Is(err, ErrInsufficientData) {
 				if len(b.RecordsSet) == 0 {
 					b.Partial = true
 				}
 				break
 			}
+			return err
+		}
+
+		b.LastRecordsBatchOffset, err = records.recordsOffset()
+		if err != nil {
 			return err
 		}
 
@@ -224,11 +261,19 @@ func (b *FetchResponseBlock) getAbortedTransactions() []*AbortedTransaction {
 }
 
 type FetchResponse struct {
-	Blocks        map[string]map[int32]*FetchResponseBlock
-	ThrottleTime  time.Duration
-	ErrorCode     int16
-	SessionID     int32
-	Version       int16
+	// Version defines the protocol version to use for encode and decode
+	Version int16
+	// ThrottleTime contains the duration in milliseconds for which the request
+	// was throttled due to a quota violation, or zero if the request did not
+	// violate any quota.
+	ThrottleTime time.Duration
+	// ErrorCode contains the top level response error code.
+	ErrorCode int16
+	// SessionID contains the fetch session ID, or 0 if this is not part of a fetch session.
+	SessionID int32
+	// Blocks contains the response topics.
+	Blocks map[string]map[int32]*FetchResponseBlock
+
 	LogAppendTime bool
 	Timestamp     time.Time
 }
@@ -341,31 +386,39 @@ func (r *FetchResponse) headerVersion() int16 {
 	return 0
 }
 
+func (r *FetchResponse) isValidVersion() bool {
+	return r.Version >= 0 && r.Version <= 11
+}
+
 func (r *FetchResponse) requiredVersion() KafkaVersion {
 	switch r.Version {
-	case 0:
-		return MinVersion
-	case 1:
-		return V0_9_0_0
-	case 2:
-		return V0_10_0_0
-	case 3:
-		return V0_10_1_0
-	case 4, 5:
-		return V0_11_0_0
-	case 6:
-		return V1_0_0_0
-	case 7:
-		return V1_1_0_0
-	case 8:
-		return V2_0_0_0
-	case 9, 10:
-		return V2_1_0_0
 	case 11:
 		return V2_3_0_0
+	case 9, 10:
+		return V2_1_0_0
+	case 8:
+		return V2_0_0_0
+	case 7:
+		return V1_1_0_0
+	case 6:
+		return V1_0_0_0
+	case 4, 5:
+		return V0_11_0_0
+	case 3:
+		return V0_10_1_0
+	case 2:
+		return V0_10_0_0
+	case 1:
+		return V0_9_0_0
+	case 0:
+		return V0_8_2_0
 	default:
-		return MaxVersion
+		return V2_3_0_0
 	}
+}
+
+func (r *FetchResponse) throttleTime() time.Duration {
+	return r.ThrottleTime
 }
 
 func (r *FetchResponse) GetBlock(topic string, partition int32) *FetchResponseBlock {

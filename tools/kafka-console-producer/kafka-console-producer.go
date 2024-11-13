@@ -3,15 +3,15 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"os"
 	"strings"
 
 	"github.com/rcrowley/go-metrics"
 
-	"github.com/Shopify/sarama"
-	"github.com/Shopify/sarama/tools/tls"
+	"github.com/IBM/sarama"
+	"github.com/IBM/sarama/tools/tls"
 )
 
 var (
@@ -92,7 +92,7 @@ func main() {
 	if *value != "" {
 		message.Value = sarama.StringEncoder(*value)
 	} else if stdinAvailable() {
-		bytes, err := ioutil.ReadAll(os.Stdin)
+		bytes, err := io.ReadAll(os.Stdin)
 		if err != nil {
 			printErrorAndExit(66, "Failed to read data from the standard input: %s", err)
 		}

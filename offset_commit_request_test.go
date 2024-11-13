@@ -2,6 +2,7 @@ package sarama
 
 import (
 	"fmt"
+	"reflect"
 	"testing"
 )
 
@@ -97,5 +98,112 @@ func TestOffsetCommitRequestV2ToV4(t *testing.T) {
 
 		request.AddBlock("topic", 0x5221, 0xDEADBEEF, 0, "metadata")
 		testRequest(t, fmt.Sprintf("one block v%d", version), request, offsetCommitRequestOneBlockV2)
+	}
+}
+
+var (
+	offsetCommitRequestOneBlockV5 = []byte{
+		0, 3, 'f', 'o', 'o', // GroupId
+		0x00, 0x00, 0x00, 0x01, // GenerationId
+		0, 3, 'm', 'i', 'd', // MemberId
+		0, 0, 0, 1, // One Topic
+		0, 5, 't', 'o', 'p', 'i', 'c', // Name
+		0, 0, 0, 1, // One Partition
+		0, 0, 0, 1, // PartitionIndex
+		0, 0, 0, 0, 0, 0, 0, 2, // CommittedOffset
+		0, 4, 'm', 'e', 't', 'a', // CommittedMetadata
+	}
+	offsetCommitRequestOneBlockV6 = []byte{
+		0, 3, 'f', 'o', 'o', // GroupId
+		0x00, 0x00, 0x00, 0x01, // GenerationId
+		0, 3, 'm', 'i', 'd', // MemberId
+		0, 0, 0, 1, // One Topic
+		0, 5, 't', 'o', 'p', 'i', 'c', // Name
+		0, 0, 0, 1, // One Partition
+		0, 0, 0, 1, // PartitionIndex
+		0, 0, 0, 0, 0, 0, 0, 2, // CommittedOffset
+		0, 0, 0, 3, // CommittedEpoch
+		0, 4, 'm', 'e', 't', 'a', // CommittedMetadata
+	}
+	offsetCommitRequestOneBlockV7 = []byte{
+		0, 3, 'f', 'o', 'o', // GroupId
+		0x00, 0x00, 0x00, 0x01, // GenerationId
+		0, 3, 'm', 'i', 'd', // MemberId
+		0, 3, 'g', 'i', 'd', // MemberId
+		0, 0, 0, 1, // One Topic
+		0, 5, 't', 'o', 'p', 'i', 'c', // Name
+		0, 0, 0, 1, // One Partition
+		0, 0, 0, 1, // PartitionIndex
+		0, 0, 0, 0, 0, 0, 0, 2, // CommittedOffset
+		0, 0, 0, 3, // CommittedEpoch
+		0, 4, 'm', 'e', 't', 'a', // CommittedMetadata
+	}
+)
+
+func TestOffsetCommitRequestV5AndPlus(t *testing.T) {
+	groupInstanceId := "gid"
+	tests := []struct {
+		CaseName     string
+		Version      int16
+		MessageBytes []byte
+		Message      *OffsetCommitRequest
+	}{
+		{
+			"v5",
+			5,
+			offsetCommitRequestOneBlockV5,
+			&OffsetCommitRequest{
+				Version:                 5,
+				ConsumerGroup:           "foo",
+				ConsumerGroupGeneration: 1,
+				ConsumerID:              "mid",
+				blocks: map[string]map[int32]*offsetCommitRequestBlock{
+					"topic": {
+						1: &offsetCommitRequestBlock{offset: 2, metadata: "meta"},
+					},
+				},
+			},
+		},
+		{
+			"v6",
+			6,
+			offsetCommitRequestOneBlockV6,
+			&OffsetCommitRequest{
+				Version:                 6,
+				ConsumerGroup:           "foo",
+				ConsumerGroupGeneration: 1,
+				ConsumerID:              "mid",
+				blocks: map[string]map[int32]*offsetCommitRequestBlock{
+					"topic": {
+						1: &offsetCommitRequestBlock{offset: 2, metadata: "meta", committedLeaderEpoch: 3},
+					},
+				},
+			},
+		},
+		{
+			"v7",
+			7,
+			offsetCommitRequestOneBlockV7,
+			&OffsetCommitRequest{
+				Version:                 7,
+				ConsumerGroup:           "foo",
+				ConsumerGroupGeneration: 1,
+				ConsumerID:              "mid",
+				GroupInstanceId:         &groupInstanceId,
+				blocks: map[string]map[int32]*offsetCommitRequestBlock{
+					"topic": {
+						1: &offsetCommitRequestBlock{offset: 2, metadata: "meta", committedLeaderEpoch: 3},
+					},
+				},
+			},
+		},
+	}
+	for _, c := range tests {
+		request := new(OffsetCommitRequest)
+		testVersionDecodable(t, c.CaseName, request, c.MessageBytes, c.Version)
+		if !reflect.DeepEqual(c.Message, request) {
+			t.Errorf("case %s decode failed, expected:%+v got %+v", c.CaseName, c.Message, request)
+		}
+		testEncodable(t, c.CaseName, c.Message, c.MessageBytes)
 	}
 }

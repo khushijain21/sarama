@@ -17,7 +17,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 )
 
 // ErrorReporter is a simple interface that includes the testing.T methods we use to report
@@ -44,7 +44,7 @@ func messageValueChecker(f ValueChecker) MessageChecker {
 	return func(msg *sarama.ProducerMessage) error {
 		val, err := msg.Value.Encode()
 		if err != nil {
-			return fmt.Errorf("Input message encoding failed: %s", err.Error())
+			return fmt.Errorf("Input message encoding failed: %w", err)
 		}
 		return f(val)
 	}
@@ -103,6 +103,8 @@ func (pc *TopicConfig) partitions(topic string) int32 {
 // and the response versions our mocks use, we default to the minimum Kafka version in most tests
 func NewTestConfig() *sarama.Config {
 	config := sarama.NewConfig()
+	config.Consumer.Retry.Backoff = 0
+	config.Producer.Retry.Backoff = 0
 	config.Version = sarama.MinVersion
 	return config
 }

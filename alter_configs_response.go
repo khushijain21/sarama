@@ -1,11 +1,28 @@
 package sarama
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // AlterConfigsResponse is a response type for alter config
 type AlterConfigsResponse struct {
+	Version      int16
 	ThrottleTime time.Duration
 	Resources    []*AlterConfigsResourceResponse
+}
+
+type AlterConfigError struct {
+	Err    KError
+	ErrMsg string
+}
+
+func (c *AlterConfigError) Error() string {
+	text := c.Err.Error()
+	if c.ErrMsg != "" {
+		text = fmt.Sprintf("%s - %s", text, c.ErrMsg)
+	}
+	return text
 }
 
 // AlterConfigsResourceResponse is a response type for alter config resource
@@ -61,12 +78,12 @@ func (a *AlterConfigsResourceResponse) encode(pe packetEncoder) error {
 	pe.putInt16(a.ErrorCode)
 	err := pe.putString(a.ErrorMsg)
 	if err != nil {
-		return nil
+		return err
 	}
 	pe.putInt8(int8(a.Type))
 	err = pe.putString(a.Name)
 	if err != nil {
-		return nil
+		return err
 	}
 	return nil
 }
@@ -100,17 +117,32 @@ func (a *AlterConfigsResourceResponse) decode(pd packetDecoder, version int16) e
 }
 
 func (a *AlterConfigsResponse) key() int16 {
-	return 32
+	return 33
 }
 
 func (a *AlterConfigsResponse) version() int16 {
-	return 0
+	return a.Version
 }
 
 func (a *AlterConfigsResponse) headerVersion() int16 {
 	return 0
 }
 
+func (a *AlterConfigsResponse) isValidVersion() bool {
+	return a.Version >= 0 && a.Version <= 1
+}
+
 func (a *AlterConfigsResponse) requiredVersion() KafkaVersion {
-	return V0_11_0_0
+	switch a.Version {
+	case 1:
+		return V2_0_0_0
+	case 0:
+		return V0_11_0_0
+	default:
+		return V2_0_0_0
+	}
+}
+
+func (r *AlterConfigsResponse) throttleTime() time.Duration {
+	return r.ThrottleTime
 }
