@@ -2,12 +2,12 @@ package sarama
 
 import (
 	"bytes"
-	"compress/gzip"
 	"fmt"
 	"sync"
 
 	snappy "github.com/eapache/go-xerial-snappy"
-	"github.com/pierrec/lz4"
+	"github.com/klauspost/compress/gzip"
+	"github.com/pierrec/lz4/v4"
 )
 
 var (
@@ -187,7 +187,7 @@ func compress(cc CompressionCodec, level int, data []byte) ([]byte, error) {
 		}
 		return buf.Bytes(), nil
 	case CompressionZSTD:
-		return zstdCompress(nil, data)
+		return zstdCompress(ZstdEncoderParams{level}, nil, data)
 	default:
 		return nil, PacketEncodingError{fmt.Sprintf("unsupported compression codec (%d)", cc)}
 	}

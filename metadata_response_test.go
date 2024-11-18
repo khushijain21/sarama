@@ -1,6 +1,9 @@
 package sarama
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 var (
 	emptyMetadataResponseV0 = []byte{
@@ -106,6 +109,70 @@ var (
 		0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02,
 		0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x03,
 	}
+
+	OneTopicV6 = []byte{
+		0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 'h', 'o', 's',
+		't', 0x00, 0x00, 0x23, 0x84, 0xff, 0xff, 0x00, 0x09, 'c', 'l', 'u', 's', 't', 'e', 'r',
+		'I', 'd', 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x04, 't', 'o',
+		'n', 'y', 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+		0x02, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+		0x02, 0x00, 0x00, 0x00, 0x00,
+	}
+
+	OneTopicV7 = []byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 'h', 'o', 's',
+		't', 0x00, 0x00, 0x23, 0x84, 0xff, 0xff, 0x00, 0x09, 'c', 'l', 'u', 's', 't', 'e', 'r',
+		'I', 'd', 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x04, 't', 'o',
+		'n', 'y', 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x7b, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00,
+	}
+
+	OneTopicV8 = []byte{
+		0x00, 0x00, 0x00, 0x00, // throttle ms
+		0x00, 0x00, 0x00, 0x01, // length brokers
+		0x00, 0x00, 0x00, 0x00, // broker[0].nodeid
+		0x00, 0x04, // brokers[0].length(nodehost)
+		'h', 'o', 's', 't', // broker[0].nodehost
+		0x00, 0x00, 0x23, 0x84, // broker[0].port (9092)
+		0xff, 0xff, // brokers[0].rack (null)
+		0x00, 0x09, 'c', 'l', 'u', 's', 't', 'e', 'r',
+		'I', 'd', 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x04, 't', 'o',
+		'n', 'y', 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x7b, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 'Y', 0x00, 0x00, 0x00,
+		0xea,
+	}
+
+	OneTopicV9 = []byte{
+		0x00, 0x00, 0x00, 0x00, // throttle ms
+		0x02,                   // length of brokers
+		0x00, 0x00, 0x00, 0x00, // broker[0].nodeid
+		0x05,               // length of brokers[0].nodehost
+		'h', 'o', 's', 't', // brokers[0].nodehost
+		0x00, 0x00, 0x23, 0x84, // brokers[0].port (9092)
+		0x00,                                              // brokers[0].rack (null)
+		0x00,                                              // empty tags
+		0x0a, 'c', 'l', 'u', 's', 't', 'e', 'r', 'I', 'd', // cluster id
+		0x00, 0x00, 0x00,
+		0x01, 0x02, 0x00, 0x00, 0x05, 't', 'o', 'n', 'y', 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7b, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+		0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x00, 0x01, 'Y', 0x00, 0x00, 0x00, 0x00, 0xea, 0x00,
+	}
+
+	OneTopicV10 = []byte{
+		0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x05, 'h', 'o', 's', 't', 0x00, 0x00, 0x23,
+		0x84, 0x00, 0x00, 0x0a, 'c', 'l', 'u', 's', 't', 'e', 'r', 'I', 'd', 0x00, 0x00, 0x00,
+		0x01, 0x02, 0x00, 0x00, 0x05, 't', 'o', 'n', 'y', 0x84, 0xcd, 0xa7, 'U', 0x7e, 0x84, 'K',
+		0xf9, 0xb7, 0xdc, 0xfc, 0x11, 0x82, 0x07, 'r', 'J', 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7b, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+		0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x00, 0x01, 'Y', 0x00, 0x00, 0x00, 0x00, 0xea, 0x00,
+	}
 )
 
 func TestEmptyMetadataResponseV0(t *testing.T) {
@@ -158,7 +225,7 @@ func TestMetadataResponseWithTopicsV0(t *testing.T) {
 		t.Fatal("Decoding produced", len(response.Topics), "topics where there were two!")
 	}
 
-	if response.Topics[0].Err != ErrNoError {
+	if !errors.Is(response.Topics[0].Err, ErrNoError) {
 		t.Error("Decoding produced invalid topic 0 error.")
 	}
 
@@ -170,7 +237,7 @@ func TestMetadataResponseWithTopicsV0(t *testing.T) {
 		t.Fatal("Decoding produced invalid partition count for topic 0.")
 	}
 
-	if response.Topics[0].Partitions[0].Err != ErrInvalidMessageSize {
+	if !errors.Is(response.Topics[0].Partitions[0].Err, ErrInvalidMessageSize) {
 		t.Error("Decoding produced invalid topic 0 partition 0 error.")
 	}
 
@@ -195,7 +262,7 @@ func TestMetadataResponseWithTopicsV0(t *testing.T) {
 		t.Error("Decoding produced invalid topic 0 partition 0 isr length.")
 	}
 
-	if response.Topics[1].Err != ErrNoError {
+	if !errors.Is(response.Topics[1].Err, ErrNoError) {
 		t.Error("Decoding produced invalid topic 1 error.")
 	}
 
@@ -292,5 +359,176 @@ func TestMetadataResponseWithOfflineReplicasV5(t *testing.T) {
 	}
 	if len(response.Topics[0].Partitions[0].OfflineReplicas) != 1 {
 		t.Error("Decoding produced", len(response.Topics[0].Partitions[0].OfflineReplicas), "should have been 1!")
+	}
+}
+
+func TestMetadataResponseV6(t *testing.T) {
+	response := MetadataResponse{}
+
+	testVersionDecodable(t, "no brokers, 1 topic with offline replica V5", &response, OneTopicV6, 6)
+	if response.ThrottleTimeMs != int32(7) {
+		t.Error("Decoding produced", response.ThrottleTimeMs, "should have been 7!")
+	}
+	if len(response.Brokers) != 1 {
+		t.Error("Decoding produced", response.Brokers, "should have been 1!")
+	}
+	if response.Brokers[0].addr != "host:9092" {
+		t.Error("Decoding produced", response.Brokers[0].addr, "should have been host:9092!")
+	}
+	if response.ControllerID != int32(1) {
+		t.Error("Decoding produced", response.ControllerID, "should have been 1!")
+	}
+	if *response.ClusterID != "clusterId" {
+		t.Error("Decoding produced", response.ClusterID, "should have been clusterId!")
+	}
+	if len(response.Topics) != 1 {
+		t.Error("Decoding produced", len(response.Topics), "should have been 1!")
+	}
+	if len(response.Topics[0].Partitions[0].OfflineReplicas) != 0 {
+		t.Error("Decoding produced", len(response.Topics[0].Partitions[0].OfflineReplicas), "should have been 0!")
+	}
+}
+
+func TestMetadataResponseV7(t *testing.T) {
+	response := MetadataResponse{}
+
+	testVersionDecodable(t, "no brokers, 1 topic with offline replica V5", &response, OneTopicV7, 7)
+	if response.ThrottleTimeMs != int32(0) {
+		t.Error("Decoding produced", response.ThrottleTimeMs, "should have been 0!")
+	}
+	if len(response.Brokers) != 1 {
+		t.Error("Decoding produced", response.Brokers, "should have been 1!")
+	}
+	if response.Brokers[0].addr != "host:9092" {
+		t.Error("Decoding produced", response.Brokers[0].addr, "should have been host:9092!")
+	}
+	if response.ControllerID != int32(1) {
+		t.Error("Decoding produced", response.ControllerID, "should have been 1!")
+	}
+	if *response.ClusterID != "clusterId" {
+		t.Error("Decoding produced", response.ClusterID, "should have been clusterId!")
+	}
+	if len(response.Topics) != 1 {
+		t.Error("Decoding produced", len(response.Topics), "should have been 1!")
+	}
+	if len(response.Topics[0].Partitions[0].OfflineReplicas) != 0 {
+		t.Error("Decoding produced", len(response.Topics[0].Partitions[0].OfflineReplicas), "should have been 0!")
+	}
+	if response.Topics[0].Partitions[0].LeaderEpoch != 123 {
+		t.Error("Decoding produced", response.Topics[0].Partitions[0].LeaderEpoch, "should have been 123!")
+	}
+}
+
+func TestMetadataResponseV8(t *testing.T) {
+	response := MetadataResponse{}
+
+	testVersionDecodable(t, "no brokers, 1 topic with offline replica V5", &response, OneTopicV8, 8)
+	if response.ThrottleTimeMs != int32(0) {
+		t.Error("Decoding produced", response.ThrottleTimeMs, "should have been 0!")
+	}
+	if len(response.Brokers) != 1 {
+		t.Error("Decoding produced", response.Brokers, "should have been 1!")
+	}
+	if response.Brokers[0].addr != "host:9092" {
+		t.Error("Decoding produced", response.Brokers[0].addr, "should have been host:9092!")
+	}
+	if response.ControllerID != int32(1) {
+		t.Error("Decoding produced", response.ControllerID, "should have been 1!")
+	}
+	if *response.ClusterID != "clusterId" {
+		t.Error("Decoding produced", response.ClusterID, "should have been clusterId!")
+	}
+	if response.ClusterAuthorizedOperations != 234 {
+		t.Error("Decoding produced", response.ClusterAuthorizedOperations, "should have been 234!")
+	}
+	if len(response.Topics) != 1 {
+		t.Error("Decoding produced", len(response.Topics), "should have been 1!")
+	}
+	if response.Topics[0].TopicAuthorizedOperations != 345 {
+		t.Error("Decoding produced", response.Topics[0].TopicAuthorizedOperations, "should have been 345!")
+	}
+	if len(response.Topics[0].Partitions[0].OfflineReplicas) != 0 {
+		t.Error("Decoding produced", len(response.Topics[0].Partitions[0].OfflineReplicas), "should have been 0!")
+	}
+	if response.Topics[0].Partitions[0].LeaderEpoch != 123 {
+		t.Error("Decoding produced", response.Topics[0].Partitions[0].LeaderEpoch, "should have been 123!")
+	}
+}
+
+func TestMetadataResponseV9(t *testing.T) {
+	response := MetadataResponse{}
+
+	testVersionDecodable(t, "no brokers, 1 topic with offline replica V5", &response, OneTopicV9, 9)
+	if response.ThrottleTimeMs != int32(0) {
+		t.Error("Decoding produced", response.ThrottleTimeMs, "should have been 0!")
+	}
+	if len(response.Brokers) != 1 {
+		t.Error("Decoding produced", response.Brokers, "should have been 1!")
+	}
+	if response.Brokers[0].addr != "host:9092" {
+		t.Error("Decoding produced", response.Brokers[0].addr, "should have been host:9092!")
+	}
+	if response.ControllerID != int32(1) {
+		t.Error("Decoding produced", response.ControllerID, "should have been 1!")
+	}
+	if *response.ClusterID != "clusterId" {
+		t.Error("Decoding produced", response.ClusterID, "should have been clusterId!")
+	}
+	if response.ClusterAuthorizedOperations != 234 {
+		t.Error("Decoding produced", response.ClusterAuthorizedOperations, "should have been 234!")
+	}
+	if len(response.Topics) != 1 {
+		t.Error("Decoding produced", len(response.Topics), "should have been 1!")
+	}
+	if response.Topics[0].TopicAuthorizedOperations != 345 {
+		t.Error("Decoding produced", response.Topics[0].TopicAuthorizedOperations, "should have been 345!")
+	}
+	if len(response.Topics[0].Partitions[0].OfflineReplicas) != 0 {
+		t.Error("Decoding produced", len(response.Topics[0].Partitions[0].OfflineReplicas), "should have been 0!")
+	}
+	if response.Topics[0].Partitions[0].LeaderEpoch != 123 {
+		t.Error("Decoding produced", response.Topics[0].Partitions[0].LeaderEpoch, "should have been 123!")
+	}
+}
+
+func TestMetadataResponseV10(t *testing.T) {
+	response := MetadataResponse{}
+
+	testVersionDecodable(t, "no brokers, 1 topic with offline replica V5", &response, OneTopicV10, 10)
+	if response.ThrottleTimeMs != int32(0) {
+		t.Error("Decoding produced", response.ThrottleTimeMs, "should have been 0!")
+	}
+	if len(response.Brokers) != 1 {
+		t.Error("Decoding produced", response.Brokers, "should have been 1!")
+	}
+	if response.Brokers[0].addr != "host:9092" {
+		t.Error("Decoding produced", response.Brokers[0].addr, "should have been host:9092!")
+	}
+	if response.ControllerID != int32(1) {
+		t.Error("Decoding produced", response.ControllerID, "should have been 1!")
+	}
+	if *response.ClusterID != "clusterId" {
+		t.Error("Decoding produced", response.ClusterID, "should have been clusterId!")
+	}
+	if response.ClusterAuthorizedOperations != 234 {
+		t.Error("Decoding produced", response.ClusterAuthorizedOperations, "should have been 234!")
+	}
+	if len(response.Topics) != 1 {
+		t.Error("Decoding produced", len(response.Topics), "should have been 1!")
+	}
+	if response.Topics[0].Uuid != [16]byte{
+		0x84, 0xcd, 0xa7, 0x55, 0x7e, 0x84, 0x4b, 0xf9,
+		0xb7, 0xdc, 0xfc, 0x11, 0x82, 0x07, 0x72, 0x4a,
+	} {
+		t.Error("Decoding produced", response.Topics[0].Uuid, "should have been different!")
+	}
+	if response.Topics[0].TopicAuthorizedOperations != 345 {
+		t.Error("Decoding produced", response.Topics[0].TopicAuthorizedOperations, "should have been 345!")
+	}
+	if len(response.Topics[0].Partitions[0].OfflineReplicas) != 0 {
+		t.Error("Decoding produced", len(response.Topics[0].Partitions[0].OfflineReplicas), "should have been 0!")
+	}
+	if response.Topics[0].Partitions[0].LeaderEpoch != 123 {
+		t.Error("Decoding produced", response.Topics[0].Partitions[0].LeaderEpoch, "should have been 123!")
 	}
 }

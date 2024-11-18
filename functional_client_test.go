@@ -1,8 +1,9 @@
-//+build functional
+//go:build functional
 
 package sarama
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -15,11 +16,11 @@ func TestFuncConnectionFailure(t *testing.T) {
 	FunctionalTestEnv.Proxies["kafka1"].Enabled = false
 	SaveProxy(t, "kafka1")
 
-	config := NewTestConfig()
+	config := NewFunctionalTestConfig()
 	config.Metadata.Retry.Max = 1
 
 	_, err := NewClient([]string{FunctionalTestEnv.KafkaBrokerAddrs[0]}, config)
-	if err != ErrOutOfBrokers {
+	if !errors.Is(err, ErrOutOfBrokers) {
 		t.Fatal("Expected returned error to be ErrOutOfBrokers, but was: ", err)
 	}
 }
@@ -28,7 +29,7 @@ func TestFuncClientMetadata(t *testing.T) {
 	setupFunctionalTest(t)
 	defer teardownFunctionalTest(t)
 
-	config := NewTestConfig()
+	config := NewFunctionalTestConfig()
 	config.Metadata.Retry.Max = 1
 	config.Metadata.Retry.Backoff = 10 * time.Millisecond
 	client, err := NewClient(FunctionalTestEnv.KafkaBrokerAddrs, config)
@@ -36,16 +37,16 @@ func TestFuncClientMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := client.RefreshMetadata("unknown_topic"); err != ErrUnknownTopicOrPartition {
+	if err := client.RefreshMetadata("unknown_topic"); !errors.Is(err, ErrUnknownTopicOrPartition) {
 		t.Error("Expected ErrUnknownTopicOrPartition, got", err)
 	}
 
-	if _, err := client.Leader("unknown_topic", 0); err != ErrUnknownTopicOrPartition {
+	if _, err := client.Leader("unknown_topic", 0); !errors.Is(err, ErrUnknownTopicOrPartition) {
 		t.Error("Expected ErrUnknownTopicOrPartition, got", err)
 	}
 
-	if _, err := client.Replicas("invalid/topic", 0); err != ErrUnknownTopicOrPartition {
-		t.Error("Expected ErrUnknownTopicOrPartition, got", err)
+	if _, err := client.Replicas("invalid/topic", 0); !errors.Is(err, ErrUnknownTopicOrPartition) && !errors.Is(err, ErrInvalidTopic) {
+		t.Error("Expected ErrUnknownTopicOrPartition or ErrInvalidTopic, got", err)
 	}
 
 	partitions, err := client.Partitions("test.4")
@@ -72,7 +73,7 @@ func TestFuncClientCoordinator(t *testing.T) {
 	setupFunctionalTest(t)
 	defer teardownFunctionalTest(t)
 
-	client, err := NewClient(FunctionalTestEnv.KafkaBrokerAddrs, NewTestConfig())
+	client, err := NewClient(FunctionalTestEnv.KafkaBrokerAddrs, NewFunctionalTestConfig())
 	if err != nil {
 		t.Fatal(err)
 	}

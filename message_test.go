@@ -32,15 +32,15 @@ var (
 	} // value
 
 	emptyGzipMessage = []byte{
-		132, 99, 80, 148, // CRC
+		196, 46, 92, 177, // CRC
 		0x00,                   // magic version byte
 		0x01,                   // attribute flags
 		0xFF, 0xFF, 0xFF, 0xFF, // key
 		// value
-		0x00, 0x00, 0x00, 0x17,
+		0x00, 0x00, 0x00, 0x14,
 		0x1f, 0x8b,
 		0x08,
-		0, 0, 0, 0, 0, 0, 255, 1, 0, 0, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 9, 110, 136, 0, 255, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	}
 
 	emptyLZ4Message = []byte{
@@ -51,7 +51,7 @@ var (
 		0xFF, 0xFF, 0xFF, 0xFF, // key
 		0x00, 0x00, 0x00, 0x0f, // len
 		0x04, 0x22, 0x4D, 0x18, // LZ4 magic number
-		100,                  // LZ4 flags: version 01, block indepedant, content checksum
+		100,                  // LZ4 flags: version 01, block independent, content checksum
 		112, 185, 0, 0, 0, 0, // LZ4 data
 		5, 93, 204, 2, // LZ4 checksum
 	}
@@ -236,11 +236,40 @@ func TestMessageDecodingVersion1(t *testing.T) {
 
 func TestMessageDecodingUnknownVersions(t *testing.T) {
 	message := Message{Version: 2}
-	err := decode(emptyV2Message, &message)
+	err := decode(emptyV2Message, &message, nil)
 	if err == nil {
 		t.Error("Decoding did not produce an error for an unknown magic byte")
 	}
 	if err.Error() != "kafka: error decoding packet: unknown magic byte (2)" {
 		t.Error("Decoding an unknown magic byte produced an unknown error ", err)
+	}
+}
+
+func TestCompressionCodecUnmarshal(t *testing.T) {
+	cases := []struct {
+		Input         string
+		Expected      CompressionCodec
+		ExpectedError bool
+	}{
+		{"none", CompressionNone, false},
+		{"zstd", CompressionZSTD, false},
+		{"gzip", CompressionGZIP, false},
+		{"unknown", CompressionNone, true},
+	}
+	for _, c := range cases {
+		var cc CompressionCodec
+		err := cc.UnmarshalText([]byte(c.Input))
+		if err != nil && !c.ExpectedError {
+			t.Errorf("UnmarshalText(%q) error:\n%+v", c.Input, err)
+			continue
+		}
+		if err == nil && c.ExpectedError {
+			t.Errorf("UnmarshalText(%q) got %v but expected error", c.Input, cc)
+			continue
+		}
+		if cc != c.Expected {
+			t.Errorf("UnmarshalText(%q) got %v but expected %v", c.Input, cc, c.Expected)
+			continue
+		}
 	}
 }

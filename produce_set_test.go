@@ -73,7 +73,7 @@ func TestProduceSetAddingMessagesOverflowBytesLimit(t *testing.T) {
 
 	msg := &ProducerMessage{Key: StringEncoder(TestMessage), Value: StringEncoder(TestMessage)}
 
-	for ps.bufferBytes+msg.byteSize(2) < parent.conf.Producer.MaxMessageBytes {
+	for ps.bufferBytes+msg.ByteSize(2) < parent.conf.Producer.MaxMessageBytes {
 		if ps.wouldOverflow(msg) {
 			t.Error("set shouldn't fill up before 1000 bytes")
 		}
@@ -255,7 +255,7 @@ func TestProduceSetV3RequestBuilding(t *testing.T) {
 	}
 
 	batch := req.records["t1"][0].RecordBatch
-	if batch.FirstTimestamp != now.Truncate(time.Millisecond) {
+	if !batch.FirstTimestamp.Equal(now.Truncate(time.Millisecond)) {
 		t.Errorf("Wrong first timestamp: %v", batch.FirstTimestamp)
 	}
 	for i := 0; i < 10; i++ {
@@ -334,7 +334,7 @@ func TestProduceSetIdempotentRequestBuilding(t *testing.T) {
 	}
 
 	batch := req.records["t1"][0].RecordBatch
-	if batch.FirstTimestamp != now.Truncate(time.Millisecond) {
+	if !batch.FirstTimestamp.Equal(now.Truncate(time.Millisecond)) {
 		t.Errorf("Wrong first timestamp: %v", batch.FirstTimestamp)
 	}
 	if batch.ProducerID != pID {

@@ -7,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"strings"
@@ -16,8 +15,8 @@ import (
 
 	"github.com/rcrowley/go-metrics"
 
-	"github.com/Shopify/sarama"
-	"github.com/Shopify/sarama/tools/tls"
+	"github.com/IBM/sarama"
+	"github.com/IBM/sarama/tools/tls"
 )
 
 var (
@@ -44,7 +43,7 @@ var (
 	securityProtocol = flag.String(
 		"security-protocol",
 		"PLAINTEXT",
-		"The name of the security protocol to talk to Kafka (PLAINTEXT, SSL) (default: PLAINTEXT).",
+		"The name of the security protocol to talk to Kafka (PLAINTEXT, SSL).",
 	)
 	tlsRootCACerts = flag.String(
 		"tls-ca-certs",
@@ -84,7 +83,7 @@ var (
 	maxOpenRequests = flag.Int(
 		"max-open-requests",
 		5,
-		"The maximum number of unacknowledged requests the client will send on a single connection before blocking (default: 5).",
+		"The maximum number of unacknowledged requests the client will send on a single connection before blocking.",
 	)
 	maxMessageBytes = flag.Int(
 		"max-message-bytes",
@@ -267,7 +266,7 @@ func main() {
 		}
 
 		if *tlsRootCACerts != "" {
-			rootCAsBytes, err := ioutil.ReadFile(*tlsRootCACerts)
+			rootCAsBytes, err := os.ReadFile(*tlsRootCACerts)
 			if err != nil {
 				printErrorAndExit(69, "failed to read root CA certificates: %v", err)
 			}
@@ -314,9 +313,6 @@ func main() {
 
 	cancel()
 	<-done
-
-	// Print final metrics.
-	printMetrics(os.Stdout, config.MetricRegistry)
 }
 
 func runAsyncProducer(topic string, partition, messageLoad, messageSize int,
@@ -326,6 +322,8 @@ func runAsyncProducer(topic string, partition, messageLoad, messageSize int,
 		printErrorAndExit(69, "Failed to create producer: %s", err)
 	}
 	defer func() {
+		// Print final metrics.
+		printMetrics(os.Stdout, config.MetricRegistry)
 		if err := producer.Close(); err != nil {
 			printErrorAndExit(69, "Failed to close producer: %s", err)
 		}
@@ -371,6 +369,8 @@ func runSyncProducer(topic string, partition, messageLoad, messageSize, routines
 		printErrorAndExit(69, "Failed to create producer: %s", err)
 	}
 	defer func() {
+		// Print final metrics.
+		printMetrics(os.Stdout, config.MetricRegistry)
 		if err := producer.Close(); err != nil {
 			printErrorAndExit(69, "Failed to close producer: %s", err)
 		}

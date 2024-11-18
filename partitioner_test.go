@@ -2,6 +2,7 @@ package sarama
 
 import (
 	"crypto/rand"
+	"hash/crc32"
 	"hash/fnv"
 	"log"
 	"testing"
@@ -24,6 +25,28 @@ func assertPartitioningConsistent(t *testing.T, partitioner Partitioner, message
 			t.Error(partitioner, "returned partition", newChoice, "inconsistent with", choice, ".")
 		}
 	}
+}
+
+type partitionerTestCase struct {
+	key               string
+	expectedPartition int32
+}
+
+func partitionAndAssert(t *testing.T, partitioner Partitioner, numPartitions int32, testCase partitionerTestCase) {
+	t.Run("partitionAndAssert "+testCase.key, func(t *testing.T) {
+		msg := &ProducerMessage{
+			Key: StringEncoder(testCase.key),
+		}
+
+		partition, err := partitioner.Partition(msg, numPartitions)
+
+		if err != nil {
+			t.Error(partitioner, err)
+		}
+		if partition != testCase.expectedPartition {
+			t.Error(partitioner, "partitioning", testCase.key, "returned partition", partition, "but expected", testCase.expectedPartition, ".")
+		}
+	})
 }
 
 func TestRandomPartitioner(t *testing.T) {
@@ -185,6 +208,62 @@ func TestHashPartitionerMinInt32(t *testing.T) {
 	}
 }
 
+func TestConsistentCRCHashPartitioner(t *testing.T) {
+	numPartitions := int32(100)
+	partitioner := NewConsistentCRCHashPartitioner("mytopic")
+
+	testCases := []partitionerTestCase{
+		{
+			key:               "abc123def456",
+			expectedPartition: 57,
+		},
+		{
+			// `SheetJS` has a crc32 hash value of 2647669026 (which is -1647298270 as a signed int32)
+			// Modding the signed value will give a partition of 70.  Modding the unsigned value will give 26
+			key:               "SheetJS",
+			expectedPartition: 26,
+		},
+		{
+			key:               "9e8c7f4cf45857cfff7645d6",
+			expectedPartition: 24,
+		},
+		{
+			key:               "3900446192ff85a5f67da10c",
+			expectedPartition: 75,
+		},
+		{
+			key:               "0f4407b7a67d6d27de372198",
+			expectedPartition: 50,
+		},
+	}
+
+	for _, tc := range testCases {
+		partitionAndAssert(t, partitioner, numPartitions, tc)
+	}
+}
+
+func TestCustomPartitionerWithConsistentHashing(t *testing.T) {
+	// Setting both `hashUnsigned` and the hash function to `crc32.NewIEEE` is equivalent to using `NewConsistentCRCHashPartitioner`
+	partitioner := NewCustomPartitioner(
+		WithHashUnsigned(),
+		WithCustomHashFunction(crc32.NewIEEE),
+	)("mytopic")
+
+	// See above re: why `SheetJS`
+	msg := ProducerMessage{
+		Key: StringEncoder("SheetJS"),
+	}
+
+	choice, err := partitioner.Partition(&msg, 100)
+	if err != nil {
+		t.Error(partitioner, err)
+	}
+	expectedPartition := int32(26)
+	if choice != expectedPartition {
+		t.Error(partitioner, "returned partition", choice, "but expected", expectedPartition, ".")
+	}
+}
+
 func TestManualPartitioner(t *testing.T) {
 	partitioner := NewManualPartitioner("mytopic")
 
@@ -207,6 +286,36 @@ func TestManualPartitioner(t *testing.T) {
 	}
 }
 
+func TestWithCustomFallbackPartitioner(t *testing.T) {
+	topic := "mytopic"
+
+	partitioner := NewCustomPartitioner(
+		// override default random partitioner with round robin
+		WithCustomFallbackPartitioner(NewRoundRobinPartitioner(topic)),
+	)(topic)
+
+	// Should use round robin implementation if there is no key
+	var i int32
+	for i = 0; i < 50; i++ {
+		choice, err := partitioner.Partition(&ProducerMessage{Key: nil}, 7)
+		if err != nil {
+			t.Error(partitioner, err)
+		}
+		if choice != i%7 {
+			t.Error("Returned partition", choice, "expecting", i%7)
+		}
+	}
+
+	// should use hash partitioner if key is specified
+	buf := make([]byte, 256)
+	for i := 0; i < 50; i++ {
+		if _, err := rand.Read(buf); err != nil {
+			t.Error(err)
+		}
+		assertPartitioningConsistent(t, partitioner, &ProducerMessage{Key: ByteEncoder(buf)}, 50)
+	}
+}
+
 // By default, Sarama uses the message's key to consistently assign a partition to
 // a message using hashing. If no key is set, a random partition will be chosen.
 // This example shows how you can partition messages randomly, even when a key is set,
@@ -217,7 +326,8 @@ func ExamplePartitioner_random() {
 
 	producer, err := NewSyncProducer([]string{"localhost:9092"}, config)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return
 	}
 	defer func() {
 		if err := producer.Close(); err != nil {
@@ -228,7 +338,8 @@ func ExamplePartitioner_random() {
 	msg := &ProducerMessage{Topic: "test", Key: StringEncoder("key is set"), Value: StringEncoder("test")}
 	partition, offset, err := producer.SendMessage(msg)
 	if err != nil {
-		log.Fatalln("Failed to produce message to kafka cluster.")
+		log.Println("Failed to produce message to kafka cluster.")
+		return
 	}
 
 	log.Printf("Produced message to partition %d with offset %d", partition, offset)
@@ -243,7 +354,8 @@ func ExamplePartitioner_manual() {
 
 	producer, err := NewSyncProducer([]string{"localhost:9092"}, config)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return
 	}
 	defer func() {
 		if err := producer.Close(); err != nil {
@@ -256,11 +368,13 @@ func ExamplePartitioner_manual() {
 
 	partition, offset, err := producer.SendMessage(msg)
 	if err != nil {
-		log.Fatalln("Failed to produce message to kafka cluster.")
+		log.Println("Failed to produce message to kafka cluster.")
+		return
 	}
 
 	if partition != 6 {
-		log.Fatal("Message should have been produced to partition 6!")
+		log.Println("Message should have been produced to partition 6!")
+		return
 	}
 
 	log.Printf("Produced message to partition %d with offset %d", partition, offset)
