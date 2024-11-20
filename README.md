@@ -25,11 +25,11 @@ Updates should always target an explicit release tag. To perform the update, fir
     # Clone the repository locally, pointing at your own fork
     git clone git@github.com:[YOUR USERNAME]/sarama.git
 
-    # Add links back to the Elastic and Shopify repositories so
+    # Add links back to the Elastic and IBM repositories so
     # we can merge between them, and run git fetch so we can
     # access the version tags.
     git remote add upstream git@github.com:elastic/sarama.git
-    git remote add shopify git@github.com:Shopify/sarama.git
+    git remote add IBM git@github.com:IBM/sarama.git
     git fetch --all
 
     # Check out the current Elastic fork and use it as a baseline
@@ -51,9 +51,9 @@ After this, open a regular pull request as in the previous section, remembering 
 
 ### Updating the Beats repository
 
-After a new fix or update, the Beats repository needs to be updated to point to the new version. You should almost always target the most recent commit in the [commits list for the `beats-fork` branch](https://github.com/elastic/sarama/commits/beats-fork) unless that would disrupt an impending release. Copy the commit hash (with the copy icon or by clicking through to the commit itself), then from a local branch of the Beats repository:
+After a new fix or update, the Beats repository needs to be updated to point to the new version. You should almost always target the most recent commit in the [commits list for the `beats-fork` branch](https://github.com/elastic/sarama/commits/beats-fork) unless that would disrupt an impending release. 
 
-    go mod edit -replace github.com/Shopify/sarama=github.com/elastic/sarama@[commit hash]
+    go get github.com/elastic/sarama@beats-fork
     make notice
 
 (When backporting to 7.8 or earlier you will also need to run `mage vendor` and then rerun `make notice` in the backport branch.)
@@ -78,10 +78,9 @@ Date:   Wed Jun 10 16:19:46 2020 -0400
 In any Beats branch, you can find the baseline Sarama version and any additional patches by checking the commit hash in the module configuration:
 
 ```
-> grep Shopify/sarama go.mod
+> grep elastic/sarama go.mod
 
-        github.com/Shopify/sarama v0.0.0-00010101000000-000000000000
-        github.com/Shopify/sarama => github.com/elastic/sarama v1.19.1-0.20200625133446-b4d980d71f60
+ github.com/elastic/sarama v1.19.1-0.20200625133446-b4d980d71f60
 ```
 
 **Important**: the tag prefix on the Sarama fork, `"v1.19.1"` in this case, comes from internal interaction between git and go modules, and has no human-discernible connection to the deployed version!
@@ -96,10 +95,13 @@ When a mainline Sarama release includes all fixes we need, we should generally p
 
 - Submit a PR against the `beats-fork` branch, updating it to the new target version and reverting any remaining custom patches (see the instructions above). This is to make sure the fork is left in a clean state if it needs to be turned on again in the future.
 - In the Beats repository:
+  * Replace the fork with the upsteam repo
+    ```
+    gofmt -w -r '"github.com/elastic/sarama" -> "github.com/IBM/sarama"' . 
+    ``` 
   * select the new Sarama version with:
 
-        go get github.com/Shopify/sarama@v1.2.3    [replace tag with the real target version]
-  * Edit `go.mod` manually to remove the line `github.com/Shopify/sarama => github.com/elastic/sarama...`
+        go get github.com/IBM/sarama@v1.2.3    [replace tag with the real target version]
   * Reload the linked version by running `mage vendor` and `mage update`
   * Commit the results and submit the resulting PR
 
