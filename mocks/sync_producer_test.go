@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/IBM/sarama"
+	"github.com/elastic/sarama"
 )
 
 func TestMockSyncProducerImplementsSyncProducerInterface(t *testing.T) {
