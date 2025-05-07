@@ -38,12 +38,20 @@ Updates should always target an explicit release tag. To perform the update, fir
     git checkout upstream/beats-fork
     git checkout -b version-upgrade
 
+    # Restore the IBM imports
+    find . -path ./examples -prune -o -name "*.go" -print0 \
+    | xargs -0 sed -i 's/"github\.com\/elastic\/sarama/"github\.com\/IBM\/sarama/g'
+
     # Merge the target version into your new branch (replace
     # the version tag as appropriate).
     # If the new version conflicts with the outstanding bug
     # fixes, you will need to resolve those conflicts in this
     # step.
     git merge v1.26.4
+
+    # Restore the elastic imports
+    find . -path ./examples -prune -o -name "*.go" -print0 \
+    | xargs -0 sed -i 's/"github\.com\/IBM\/sarama/"github\.com\/elastic\/sarama/g'
 
     # Push the update back to your fork on github.
     git push --set-upstream origin version-upgrade
