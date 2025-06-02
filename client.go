@@ -1074,26 +1074,26 @@ func (client *client) tryRefreshMetadata(topics []string, attemptsRemaining int,
 			_ = broker.Close()
 			client.deregisterBroker(broker)
 		} else {
-			if errors.Is(err, ErrSASLHandshakeReadEOF) ||
-				errors.Is(err, ErrSASLHandshakeSendEOF) ||
-				errors.Is(err, ErrFetchMetadataEOF) ||
-				errors.Is(err, ErrBadTLSHandshake) {
-				// These errors are typically unrecoverable, so we return them
-				// directly here to avoid falling back on the less useful
-				// "client has run out of brokers" error after retrying.
-				//
-				// Beats-specific note: if these errors arise, the connection
-				// will still be retried, so this will not break things if the
-				// error is temporary; it will just retry at the user-configured
-				// rate, and with more informative log messages.
-				return err
-			}
-
 			// some other error, remove that broker and try again
 			Logger.Printf("client/metadata got error from broker %d while fetching metadata: %v\n", broker.ID(), err)
 			brokerErrors = append(brokerErrors, err)
 			_ = broker.Close()
 			client.deregisterBroker(broker)
+
+			if errors.Is(err, ErrSASLHandshakeReadEOF) ||
+				errors.Is(err, ErrSASLHandshakeSendEOF) ||
+				errors.Is(err, ErrFetchMetadataEOF) ||
+				errors.Is(err, ErrBadTLSHandshake) {
+				// These errors are typically (but not always) unrecoverable, so we
+				// return them directly here to avoid falling back on the less useful
+				// "client has run out of brokers" error after retrying.
+				//
+				// Beats-specific note: if these errors arise, the connection
+				// will still be retried, so this will not break things if the
+				// error is temporary; it will just retry the next broker at the
+				// user-configured rate, and with more informative log messages.
+				return err
+			}
 		}
 	}
 
