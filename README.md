@@ -9,6 +9,7 @@ The current baseline Sarama version is `v1.43.3`.
 The additional patches applied to this version are:
 - A fix for exponential backoff when a Kafka broker is down ([issue](https://github.com/Shopify/sarama/issues/1719), [pull request](https://github.com/elastic/sarama/pull/10), [upstream pull request](https://github.com/Shopify/sarama/pull/1720))
 - Report common unrecoverable connection / authentication errors ([issue](https://github.com/elastic/beats/issues/26294), [pull request](https://github.com/elastic/sarama/pull/15))
+  * A fix to the verbose error reporting where a TCP reset signal could prevent a broker connection from being cleaned up properly ([issue](https://github.com/elastic/beats/issues/44606), [pull request](https://github.com/elastic/sarama/pull/28))
 - Disable kerberos if requirefips tags is passed ([issue](https://github.com/elastic/beats/issues/42867), [pull request](https://github.com/elastic/sarama/pull/25))
 
 ## Updating this repository
